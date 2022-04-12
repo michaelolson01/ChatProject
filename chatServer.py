@@ -6,37 +6,79 @@ import requests
 
 clients = []
 usernames = []
+password = []
+userfile = None
+
+def readuserfile():
+    try:
+        print('Reading in user data...')
+        userfile = open('users.dat', 'r+')
+        while currec != '':
+            currec = userfile.readlin()
+            print(currec)
+            
+    except:
+        print('User data does not exist, Creating...')
+        userfile = open('users.dat', 'w+')
+
+def getUsername(client):
+    returnval = ''
+    
+    try:
+        index = clients.index(client)
+        returnval =  usernames[index]
+    except:
+        returnval = "Server"
+        
+    return returnval
 
 def handle(client):
     while True:
         try:
             message = client.recv(1024)
-            publicMessage(message, client)
+            if (message.decode('ascii') == "PM"):
+                print("Public Message from " + getUsername(client))
+            elif (message.decode('ascii') == "DM"):
+                print("Direct Message from " + getUsername(client))
+            elif (message.decode('ascii') == "EX"):
+                print(getUsername(client) + " is leaving...")
+                clientDisconnect(client)
+                break;
+            else:
+                publicMessage(message, client)
+                
         except:
-            clientDisconnect(client)
+            print("Handle Error...")
+            if (client in clients):
+                clientDisconnect(client)
             break;
 
-def publicMessage(message, client):
-    if (client == host):
+def publicMessage(message, sender):
+    if (sender == host):
         messageUser = 'Server'
     else:
-        index = clients.index(client)
+        index = clients.index(sender)
         messageUser = usernames[index]
-    
-    for client in clients:
-        client.send(message)
 
-def directMessage(user, client):
-    print("Send a direct message to " + user)
+    messageout = getUsername(sender) + ":" + message.decode('ascii')
+    for client in clients:
+        client.send(messageout.encode('ascii'))
+
+def directMessage(message, receiver, sender):
+    index = clients.index(receiver)
+    messageUser = usernames[index]
+    print("Send a direct message to " + messageUser)
+    
+    receiver.send(message.encode('ascii'))
 
 def clientDisconnect(client):
     print("Client is disconnecting: " + str(client))
     index = clients.index(client)
     clients.remove(client)
     client.close()
-    username = username[index]
+    username = usernames[index]
     publicMessage('{} left!'.format(username).encode('ascii'), host)
-    username.remove(username)
+    usernames.remove(username)
 
 def receiveMessage():
     while True:
@@ -45,12 +87,19 @@ def receiveMessage():
 
         client.send('USERNAME'.encode('ascii'))
         username = client.recv(1024).decode('ascii')
-        usernames.append(username)
-        clients.append(client)
+        client.send('PASSWORD'.encode('ascii'))
+        password = client.recv(1024).decode('ascii')
+        try:
+            # See if the client is already in the list.
+            index = clients.index(client)
+            directMessage("Welcome back!", client, server)
+        except:
+            usernames.append(username)
+            clients.append(client)
+            directMessage("Welcome to the server!", client, server)
 
         print('Username is {}'.format(username))
         publicMessage('{} joined!'.format(username).encode('ascii'), host)
-        client.send('Connected to server!'.encode('ascii'))
         
         thread = threading.Thread(target=handle, args=(client,))
         thread.start()
@@ -67,3 +116,4 @@ server.listen()
 print("Server is listening...")
 receiveMessage()
 
+userlist.close()
