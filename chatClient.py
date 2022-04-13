@@ -4,6 +4,7 @@ import socket
 import threading
 import enum
 import time
+import sys
 
 class clientState(enum.Enum):
     Waiting = 0
@@ -11,10 +12,9 @@ class clientState(enum.Enum):
     DM = 2
     EX = 3
     WaitingPMConf = 4
-    WaitingDMConf = 5
+    WaitingPassword = 5
 
 username = ''
-password = ''
 iAmRunning = True
 currentState = clientState.Waiting
 onlineList = []
@@ -23,6 +23,14 @@ listReceived = False
 def printHelp():
     print("Enter PM for public message, DM for direct message, HP for help or EX to exit):")
 
+def closeClient():
+    global currentState
+    global iAmRunning
+    
+    currentState = clientState.EX
+    iAmRunning = False
+    client.close()
+    
 def getFromServer():
     global listReceived
     global onlineList
@@ -33,7 +41,33 @@ def getFromServer():
     while iAmRunning:
         try:
             message = client.recv(1024).decode('ascii')
-            if (currentState == clientState.DM):
+            if (currentState == clientState.WaitingPassword):
+                commandPart = message[0:8]
+                if commandPart == 'USERNAME':
+                    print(message[8:])
+                    client.send(username.encode('ascii'))
+                elif commandPart == 'PASSWORD':
+                    acceptable = False
+                    while not acceptable:
+                        password = input("Please enter password: ")
+                        if (password == ""):
+                            print("Please try again")
+                            continue
+                        else:
+                            acceptable = True
+                    client.send(password.encode('ascii'))
+                elif commandPart == 'SUCCESS!':
+                    print(message[8:])
+                    print('Log in successful')
+                    currentState = clientState.Waiting
+                elif commandPart == 'CLOSENOW':
+                    print(message[8:])
+                    print('Log in unsuccessful')
+                    closeClient()
+                else:
+                    print("'" + message + "'")
+                
+            elif (currentState == clientState.DM):
                 # we sent a DM message, so get get back list of eligable recipients.
                 if (message[0] == '['):
                     # remove the beginning and the end
@@ -43,15 +77,9 @@ def getFromServer():
                     listReceived = True
                 else:
                     print(message)
-            elif message == 'CLOSE':
+            elif message == 'CLOSENOW':
                 print("User is already online... quiting")
-                currentState = clientState.EX
-                iAmRunning = False
-                client.close();
-            elif message == 'USERNAME':
-                client.send(username.encode('ascii'))
-            elif message == 'PASSWORD':
-                client.send(password.encode('ascii'))
+                closeClient()
             elif message == 'PM':
                 currentState = clientState.PM
             elif message == 'DM':
@@ -62,8 +90,8 @@ def getFromServer():
                 print(message)
         except:
             print("System error")
-            client.close()
-            iAmRunning = False
+            closeClient()
+            exit(0)
             break
 
 def sendToServer():
@@ -76,7 +104,10 @@ def sendToServer():
     
     printHelp()
     while iAmRunning:
-        if (currentState == clientState.PM):
+        if (currentState == clientState.EX):
+          closeClient()
+          break
+        elif (currentState == clientState.PM):
             message = input("Enter public message:")
             client.send(message.encode('ascii'))
             currentState = clientState.WaitingPMConf;
@@ -111,6 +142,9 @@ def sendToServer():
                 print("Exiting...")
                 iAmRunning = False
                 client.send("EX".encode('ascii'))
+            else:
+                printHelp()
+                continue
         elif (currentState == clientState.WaitingPMConf):
             count+=1;
             if (count > 100000):
@@ -121,13 +155,25 @@ def sendToServer():
             # ignore it, state probably changed while we were doing something.
             count = 0
 
+try:
+    if (len(sys.argv) == 4):
+        hostname = sys.argv[1]
+        port = int(sys.argv[2])
+        username = sys.argv[3]
+    else:
+        hostname = socket.gethostname()
+        port = 56017
+        username = input("Enter Username: ")
+except:
+    print("Usage:")
+    print("$ ./chatclient.py Server_Name Port Username")  
+    print("For example ")                                 
+    print("$ ./chatclient.py 127.0.1.11 56017 Your_Name") 
+    exit(0)                                               
 
-username = input("Enter Username: ")
-password = input("Enter Password: ")
+# This needs to be handled by the server.
 
-hostname = socket.gethostname()
 host = socket.gethostbyname(hostname)
-port = 56017
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client.connect((host, port))
@@ -135,8 +181,9 @@ client.connect((host, port))
 receiving = threading.Thread(target=getFromServer)
 receiving.start()
 
-#writing = threading.Thread(target=sendToServer)
-#writing.start()
+currentState = clientState.WaitingPassword
+
 sendToServer()
 
 receiving.join()                
+

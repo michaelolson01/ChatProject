@@ -4,6 +4,8 @@ import socket
 import threading
 import requests
 import enum
+import sys
+import time
 
 class clientState(enum.Enum):
     Waiting = 0 # online
@@ -11,7 +13,7 @@ class clientState(enum.Enum):
     DM = 2 # Working on a DM
     EX = 3 # offline
 
-# clientList of  clientData ['socket client info' 'username' 'client state']
+# clientList of  clientData ['socket client info' 'username' 'client state' 'password']
 clientList = []
 password = []
 userfile = None
@@ -78,18 +80,98 @@ def getOnlineList():
             online.append(clientList[i][1])
     return online
     
-def readuserfile():
+def readUserFile():
+    global clientList
+    try:
+        print('Reading in user data...')
+        userfile = open('users.dat', 'r')
+        currec = userfile.readline()
+        while currec != '':
+            record = []
+            record.append("")
+            record.append(currec.split('%')[0])
+            record.append(clientState.EX)
+            clientList.append(record)
+            currec = userfile.readline()
+        userfile.close()
+        print(clientList)
+    except:
+        print('Unable to import user data')
+
+def readUserPassword(user):
     try:
         print('Reading in user data...')
         userfile = open('users.dat', 'r+')
+        currec = userfile.readline()
         while currec != '':
-            currec = userfile.readlin()
+            record = currec.split("%")
+            if record[0] == user:
+                print(record[0] + " found")
+                return record[1]
             print(currec)
+            currec = userfile.readline()
+        userfile.close()
     except:
-        print('User data does not exist, Creating...')
-        userfile = open('users.dat', 'w+')
+        print('Unable to import user data')
+        
+def saveUserData(user, password):
+    try:
+        print('Writing user data')
+        userfile = open('users.dat', 'a+')
+        print('File open')
+        stringToWrite = user + "%" + password + "%\n"
+        print('String Created')
+        userfile.write(stringToWrite)
+    except:
+        print('Error writing file')
+        
+def handle(client, username):
+    if (isInClientList(username)):
+        if (isOnline(username)):
+            client.sendall("CLOSENOW".encode('ascii'))
+            return
+        else:
+            passAttempts = 0
+            successful = False
+            updateUser(username, client)
+            directMessage("Welcome back! Please enter your password\n", client, server)
+            readPassword = readUserPassword(username)
+            while (passAttempts < 3 and not successful):
+                time.sleep(0.05)
+                client.sendall('PASSWORD'.encode('ascii'))
+                password = client.recv(1024).decode('ascii')
+                print(str(readPassword) + " vs. " + str(password))
+                if readPassword != password:
+                    client.sendall(("Incorrect Password, try again. Attempts left : " + str(2-passAttempts)).encode('ascii'))
+                    time.sleep(0.05)
+                    passAttempts += 1
+                else:
+                    successful = True
+            if (successful):
+                client.sendall("SUCCESS!".encode('ascii'))
+                setUserState(username, clientState.Waiting)
+            else:
+                client.sendall("CLOSENOW".encode('ascii'))
+                return
+                        
+    else:
+        clientData = []
+        clientData.append(client)
+        clientData.append(username)
+        clientData.append(clientState.Waiting)
+        clientList.append(clientData)
+        directMessage('Welcome to the server!\n', client, server)
+        directMessage('Please enter a new password', client, server)
+        time.sleep(0.05)
+        client.sendall('PASSWORD'.encode('ascii'))
+        password = client.recv(1024).decode('ascii')
+        time.sleep(0.05)
+        client.sendall('SUCCESS!'.encode('ascii'))
+        saveUserData(username, password)
+            
+        publicMessage('{} joined!'.format(username).encode('ascii'), host)
 
-def handle(client):
+
     cState = clientState.Waiting
     cUsername = getClientUsername(client)
     while True:
@@ -103,14 +185,14 @@ def handle(client):
                 if (message.decode('ascii') == "PM"):
                     cState = clientState.PM
                     setUserState(cUsername, clientState.PM)
-                    client.send("PM".encode('ascii'))
+                    client.sendall("PM".encode('ascii'))
                 elif (message.decode('ascii') == "DM"):
                     onlineList = getOnlineList()
                     reply = str(onlineList)
                     if (reply == 'None'):
-                        client.send("['EmptyList']".encode('ascii'))
+                        client.sendall("['EmptyList']".encode('ascii'))
                     else:
-                        client.send(reply.encode('ascii'))
+                        client.sendall(reply.encode('ascii'))
                         cState = clientState.DM
                         setClientState(client, clientState.DM)
                 elif (message.decode('ascii') == "EX"):
@@ -119,7 +201,7 @@ def handle(client):
                     break;
                 elif (message.decode('ascii') == "REQ-CONF"):
                     # Never got confirmation, so resend it.
-                    client.send("PM-CONF".encode('ascii'))
+                    client.sendall("PM-CONF".encode('ascii'))
                 else:
                     print("Unexpected Message: '" + message + "'. Breaking connection before getting spammed.")
                     clientDisconnect(client)
@@ -128,7 +210,7 @@ def handle(client):
                 # We received the public message, now distribute it.
                 publicMessage(message, client)
                 # Send a confirmation, and set us back to waiting....
-                client.send("PM-CONF ".encode('ascii'))
+                client.sendall("PM-CONF ".encode('ascii'))
                 cState = clientState.Waiting
                 setUserState(cUsername, clientState.Waiting)
             elif (cState == clientState.DM):
@@ -157,12 +239,12 @@ def publicMessage(message, sender):
     messageout = messageUser + ": " + message.decode('ascii')
     for client in clientList:
         if (client[2] != clientState.EX):
-            client[0].send(messageout.encode('ascii'))
+            client[0].sendall(messageout.encode('ascii'))
 
 def directMessage(message, receiver, sender):
     # print(getClientUsername(sender) + "Sent a direct message to " + getClientUsername(receiver))
     outgoing = "DM (" + getClientUsername(sender) + "): " +  message;
-    receiver.send(outgoing.encode('ascii'))
+    receiver.sendall(outgoing.encode('ascii'))
 
 def clientDisconnect(client):
     if (getClientState(client) != clientState.EX):
@@ -170,40 +252,26 @@ def clientDisconnect(client):
         client.close()
 
 def receiveMessage():
+    global receiveThread
+    
     while True:
         client, address = server.accept()
-        print("Connected with {}".format(str(address)))
 
-        client.send('USERNAME'.encode('ascii'))
+        client.sendall('USERNAME'.encode('ascii'))
         username = client.recv(1024).decode('ascii')
-        client.send('PASSWORD'.encode('ascii'))
-        password = client.recv(1024).decode('ascii')
-        if (isInClientList(username)):
-            if (isOnline(username)):
-                print("Already online")
-                client.send("CLOSE".encode('ascii'))
-                continue
-            else:
-                updateUser(username, client)
-                directMessage("Welcome back!", client, server)
-                setUserState(username, clientState.Waiting)
-                setClientState(client, clientState.Waiting)
-        else:
-            clientData = []
-            clientData.append(client)
-            clientData.append(username)
-            clientData.append(clientState.Waiting)
-            clientList.append(clientData)
-            directMessage("Welcome to the server!", client, server)
-                
-        publicMessage('{} joined!'.format(username).encode('ascii'), host)
 
-        receiveThread = threading.Thread(target=handle, args=(client,))
+        receiveThread = threading.Thread(target=handle, args=(client,username, ))
         receiveThread.start()
 
+try:
+    port = int(sys.argv[1])
+except:
+    port = 56017
+
+readUserFile()
+    
 hostname = socket.gethostname()
 host = socket.gethostbyname(hostname)
-port = 56017
 print("IP Address is " + host + ":" + str(port))
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
