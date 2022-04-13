@@ -45,6 +45,18 @@ def getClientUsername(client):
     if (clientData != None):
         return clientData[1]
 
+def getClientByUsername(username):
+    for i in range(0, len(clientList)):
+        if (clientList[i][1] == username):
+            return clientList[i]
+    return None
+
+def getOnlineList():
+    online = []
+    for i in range(0,  len(clientList)):
+        if (clientList[i][2] != clientState.EX):
+            online.append(clientList[i][1])
+    
 def readuserfile():
     try:
         print('Reading in user data...')
@@ -60,7 +72,7 @@ def handle(client):
     cState = clientState.Waiting
     cUsername = getClientUsername(client)
     while True:
-        try:
+#       try:
             # wait for a message
             message = client.recv(1024)
             if (cState == clientState.Waiting):
@@ -76,29 +88,46 @@ def handle(client):
                     print("PM response sent")
                 elif (message.decode('ascii') == "DM"):
                     print("Direct Message from " + cUsername)
+                    onlineList = getOnlineList()
+                    reply = str(onlineList)
+                    print(onlineList)
+                    if (reply == 'None'):
+                        client.send('[EmptyList]'.encode('ascii'))
+                    else:
+                        client.send(reply.encode('ascii'))
+                    cState = clientState.DM
+                    setClientState(client, clientState.DM)
                 elif (message.decode('ascii') == "EX"):
                     print(cUsername + " is leaving...")
                     clientDisconnect(client)
                     break;
+                elif (message.decode('ascii') == "REQ-CONF"):
+                    # Never got confirmation, so resend it.
+                    client.send("PM-CONF".encode('ascii'))
                 else:
                     print("Unexpected Message.")
+                    print(message)
             elif (cState == clientState.PM):
                 # We received the public message, now distribute it.
                 publicMessage(message, client)
                 # Send a confirmation, and set us back to waiting....
-                client.send("PM-CONF".encode('ascii'))
+                client.send("PM-CONF ".encode('ascii'))
                 cState = clientState.Waiting
                 setClientState(client, clientState.Waiting)
             elif (cState == clientState.DM):
-                # We are in middle of doing a direct message
-                print("Direct message")
+                # We should get 2 messages, the user, and the message.
+                client = getClientByUsername(message)
+                message = client.recv(1024)
+                directMessage(message)
+                setClientState(client, clientState.Waiting)
+                cState = clientState.Waiting
             else:
                 print("System Error.... Unknown state.")
-        except:
-            print("Handle Error...")
-            if (isInClientList(client)):
-                clientDisconnect(client)
-            break;
+#       except:
+#            print("Handle Error...")
+#            if (isInClientList(client)):
+#                clientDisconnect(client)
+#            break;
 
 def publicMessage(message, sender):
     if (sender == host):
@@ -110,7 +139,6 @@ def publicMessage(message, sender):
     messageout = messageUser + ":" + message.decode('ascii')
     for client in clientList:
         if (client[2] != clientState.EX):
-            print(client[1] + " " + str(client[2]))
             client[0].send(messageout.encode('ascii'))
 
 def directMessage(message, receiver, sender):
@@ -137,6 +165,7 @@ def receiveMessage():
             setClientState(client, clientState.Waiting)
         else:
             clientData = []
+            # make sure user name is unique, if not, send message back to client.
             clientData.append(client)
             clientData.append(username)
             clientData.append(clientState.Waiting)
@@ -144,7 +173,7 @@ def receiveMessage():
             directMessage("Welcome to the server!", client, server)
 
         publicMessage('{} joined!'.format(username).encode('ascii'), host)
-        
+
         thread = threading.Thread(target=handle, args=(client,))
         thread.start()
 
@@ -158,6 +187,6 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind((host,port))
 server.listen()
 print("Server is listening...")
-receiveMessage()
 
+receiveMessage()
 userlist.close()
