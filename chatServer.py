@@ -83,7 +83,6 @@ def getOnlineList():
 def readUserFile():
     global clientList
     try:
-        print('Reading in user data...')
         userfile = open('users.dat', 'r')
         currec = userfile.readline()
         while currec != '':
@@ -96,23 +95,21 @@ def readUserFile():
         userfile.close()
         print(clientList)
     except:
-        print('Unable to import user data')
+        print('No user file found.')
 
 def readUserPassword(user):
     try:
-        print('Reading in user data...')
         userfile = open('users.dat', 'r+')
         currec = userfile.readline()
         while currec != '':
             record = currec.split("%")
             if record[0] == user:
-                print(record[0] + " found")
                 return record[1]
             print(currec)
             currec = userfile.readline()
         userfile.close()
     except:
-        print('Unable to import user data')
+        print('Error reading file')
         
 def saveUserData(user, password):
     try:
@@ -134,7 +131,7 @@ def handle(client, username):
             passAttempts = 0
             successful = False
             updateUser(username, client)
-            directMessage("Welcome back! Please enter your password\n", client, server)
+            directMessage("Welcome back!", client, server)
             readPassword = readUserPassword(username)
             while (passAttempts < 3 and not successful):
                 time.sleep(0.05)
@@ -161,7 +158,6 @@ def handle(client, username):
         clientData.append(clientState.Waiting)
         clientList.append(clientData)
         directMessage('Welcome to the server!\n', client, server)
-        directMessage('Please enter a new password', client, server)
         time.sleep(0.05)
         client.sendall('PASSWORD'.encode('ascii'))
         password = client.recv(1024).decode('ascii')
@@ -187,6 +183,7 @@ def handle(client, username):
                     setUserState(cUsername, clientState.PM)
                     client.sendall("PM".encode('ascii'))
                 elif (message.decode('ascii') == "DM"):
+                    print("DM requested")
                     onlineList = getOnlineList()
                     reply = str(onlineList)
                     if (reply == 'None'):
@@ -214,6 +211,9 @@ def handle(client, username):
                 cState = clientState.Waiting
                 setUserState(cUsername, clientState.Waiting)
             elif (cState == clientState.DM):
+                # The transaction was cancelled.
+                if (message.decode('ascii') == "CANCEL"):
+                    cState = clientState.Waiting
                 # We should get 2 messages, the user, and the message.
                 recipient = getClientByUsername(message.decode('ascii'))
                 if (recipient != None):
@@ -257,6 +257,8 @@ def receiveMessage():
     while True:
         client, address = server.accept()
 
+        # we got a message, don't wait too long for a response...
+        count = 0
         client.sendall('USERNAME'.encode('ascii'))
         username = client.recv(1024).decode('ascii')
 

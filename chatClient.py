@@ -13,6 +13,7 @@ class clientState(enum.Enum):
     EX = 3
     WaitingPMConf = 4
     WaitingPassword = 5
+    WaitingForCommand = 6
 
 username = ''
 iAmRunning = True
@@ -65,7 +66,7 @@ def getFromServer():
                     print('Log in unsuccessful')
                     closeClient()
                 else:
-                    print("'" + message + "'")
+                    print(message)
                 
             elif (currentState == clientState.DM):
                 # we sent a DM message, so get get back list of eligable recipients.
@@ -114,21 +115,31 @@ def sendToServer():
             count = 0
         elif (currentState == clientState.DM):
             successful = False
+            cancel = False
             while (listReceived == False):
                 # we gotta wait for the list to be fully received
                 time.sleep(0.005)
             for i in range(0, len(onlineList)):
                 print(str(i) + ": " + onlineList[i])
-            while (not successful):
-                userNum = input("Enter number of recipient: ")
-                if int(userNum) in range(0, len(onlineList)):
-                    successful = True
-                    client.send(onlineList[int(userNum)].encode('ascii'))
-            message = input("Enter direct message:")
-            client.send(message.encode('ascii'))
+            while (not successful and not cancel):
+                userNum = input("Enter number of recipient(-1 to cancel): ")
+                try:
+                    number = int(userNum)
+                    if (number == -1):
+                        cancel = True
+                        client.send("CANCEL".encode('ascii'))
+                    elif number in range(0, len(onlineList)):
+                        successful = True
+                        client.send(onlineList[int(userNum)].encode('ascii'))
+                except:
+                    successful = False
+            if (successful):
+                message = input("Enter direct message:")
+                client.send(message.encode('ascii'))
             currentState = clientState.Waiting;
             listReceived = False
         elif (currentState == clientState.Waiting):
+            printHelp()
             message = input('')
             if (message == "PM" or message == "pm"):
                 client.send("PM".encode('ascii'))
@@ -173,6 +184,7 @@ except:
 
 # This needs to be handled by the server.
 
+currentState = clientState.WaitingPassword
 host = socket.gethostbyname(hostname)
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -180,8 +192,6 @@ client.connect((host, port))
 
 receiving = threading.Thread(target=getFromServer)
 receiving.start()
-
-currentState = clientState.WaitingPassword
 
 sendToServer()
 
