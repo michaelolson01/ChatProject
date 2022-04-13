@@ -1,11 +1,17 @@
 #!/usr/bin/python3
-
+###############################
+# Michael Olson jz6081ak      #
+# Choua Vang                  #
+# ICS 460-51                  #
+# Client for the chat program #
+###############################
 import socket
 import threading
 import enum
 import time
 import sys
 
+# An emumeration to keep track of the state of the client.
 class clientState(enum.Enum):
     Waiting = 0
     PM = 1
@@ -20,18 +26,21 @@ iAmRunning = True
 currentState = clientState.Waiting
 onlineList = []
 listReceived = False
-    
+
+# procedure to print help
 def printHelp():
     print("Enter PM for public message, DM for direct message, HP for help or EX to exit):")
 
+# procedure to close the client
 def closeClient():
     global currentState
     global iAmRunning
-    
     currentState = clientState.EX
     iAmRunning = False
     client.close()
-    
+
+# function that gets messages from the server
+# threaded to get messages at any time.
 def getFromServer():
     global listReceived
     global onlineList
@@ -95,6 +104,7 @@ def getFromServer():
             exit(0)
             break
 
+# function to send a message to the server
 def sendToServer():
     global listReceived
     global onlineList
@@ -166,15 +176,19 @@ def sendToServer():
             # ignore it, state probably changed while we were doing something.
             count = 0
 
+# Entry point of the program
+ 
+# Check input, and make sure it is correct 
 try:
     if (len(sys.argv) == 4):
         hostname = sys.argv[1]
         port = int(sys.argv[2])
         username = sys.argv[3]
-    else:
-        hostname = socket.gethostname()
-        port = 56017
-        username = input("Enter Username: ")
+#    else:
+#        hostname = socket.gethostname()
+#        port = 56017
+#        username = input("Enter Username: ")
+# If not correct, prints out how to use it.
 except:
     print("Usage:")
     print("$ ./chatclient.py Server_Name Port Username")  
@@ -182,18 +196,27 @@ except:
     print("$ ./chatclient.py 127.0.1.11 56017 Your_Name") 
     exit(0)                                               
 
-# This needs to be handled by the server.
-
+# Sets our state as waiting for a password
 currentState = clientState.WaitingPassword
-host = socket.gethostbyname(hostname)
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect((host, port))
+# gets client host
+# If something goes wrong here, the program just crashes.
+# Not pretty, but effective
+try:
+    host = socket.gethostbyname(hostname)
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.connect((host, port))
+except:
+    print("Connection failed.")
+    exit(1)
 
+# Set up the receiving threads
 receiving = threading.Thread(target=getFromServer)
 receiving.start()
 
+# Start the message loop
 sendToServer()
 
+# Close the thread
 receiving.join()                
 
