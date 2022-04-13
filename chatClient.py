@@ -43,6 +43,11 @@ def getFromServer():
                     listReceived = True
                 else:
                     print(message)
+            elif message == 'CLOSE':
+                print("User is already online... quiting")
+                currentState = clientState.EX
+                iAmRunning = False
+                client.close();
             elif message == 'USERNAME':
                 client.send(username.encode('ascii'))
             elif message == 'PASSWORD':
@@ -58,6 +63,7 @@ def getFromServer():
         except:
             print("System error")
             client.close()
+            iAmRunning = False
             break
 
 def sendToServer():
@@ -76,13 +82,17 @@ def sendToServer():
             currentState = clientState.WaitingPMConf;
             count = 0
         elif (currentState == clientState.DM):
+            successful = False
             while (listReceived == False):
                 # we gotta wait for the list to be fully received
                 time.sleep(0.005)
             for i in range(0, len(onlineList)):
                 print(str(i) + ": " + onlineList[i])
-            message = input("Choose recipient:")
-            client.send(message.encode('ascii'))
+            while (not successful):
+                userNum = input("Enter number of recipient: ")
+                if int(userNum) in range(0, len(onlineList)):
+                    successful = True
+                    client.send(onlineList[int(userNum)].encode('ascii'))
             message = input("Enter direct message:")
             client.send(message.encode('ascii'))
             currentState = clientState.Waiting;
@@ -129,4 +139,4 @@ receiving.start()
 #writing.start()
 sendToServer()
 
-                
+receiving.join()                
