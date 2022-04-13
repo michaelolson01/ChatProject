@@ -13,7 +13,7 @@ https://www.python.org/doc/ - This is where I got most everything I didn't know.
 Python 3 is needed to run the programs.
 
 The program is written in python3, and the python3 shebang is there, so if you have python3 installed under the normal place '/usr/bin/', 
-$ ./chatserver 
+$ ./chatserver
 Should start the server.
 and
 $ ./chatclient

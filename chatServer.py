@@ -284,7 +284,7 @@ except:
     # a port was not entered, print out usage, and quit
     print("Invalid port")
     print("Usage: ")
-    print("$ ./chatserver <PORT>")
+    print("$ " + sys.argv[0] + " <PORT>")
     exit(1)
 
 # read in the user file.
