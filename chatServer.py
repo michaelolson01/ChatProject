@@ -93,7 +93,6 @@ def readUserFile():
             clientList.append(record)
             currec = userfile.readline()
         userfile.close()
-        print(clientList)
     except:
         print('No user file found.')
 
@@ -113,11 +112,8 @@ def readUserPassword(user):
         
 def saveUserData(user, password):
     try:
-        print('Writing user data')
         userfile = open('users.dat', 'a+')
-        print('File open')
         stringToWrite = user + "%" + password + "%\n"
-        print('String Created')
         userfile.write(stringToWrite)
     except:
         print('Error writing file')
@@ -137,7 +133,6 @@ def handle(client, username):
                 time.sleep(0.05)
                 client.sendall('PASSWORD'.encode('ascii'))
                 password = client.recv(1024).decode('ascii')
-                print(str(readPassword) + " vs. " + str(password))
                 if readPassword != password:
                     client.sendall(("Incorrect Password, try again. Attempts left : " + str(2-passAttempts)).encode('ascii'))
                     time.sleep(0.05)
@@ -183,7 +178,6 @@ def handle(client, username):
                     setUserState(cUsername, clientState.PM)
                     client.sendall("PM".encode('ascii'))
                 elif (message.decode('ascii') == "DM"):
-                    print("DM requested")
                     onlineList = getOnlineList()
                     reply = str(onlineList)
                     if (reply == 'None'):
@@ -257,8 +251,6 @@ def receiveMessage():
     while True:
         client, address = server.accept()
 
-        # we got a message, don't wait too long for a response...
-        count = 0
         client.sendall('USERNAME'.encode('ascii'))
         username = client.recv(1024).decode('ascii')
 
@@ -268,13 +260,17 @@ def receiveMessage():
 try:
     port = int(sys.argv[1])
 except:
-    port = 56017
-
+#    port = 56017
+    print("Invalid port")
+    print("Usage: ")
+    print("$ ./chatserver <PORT>")
+    exit(1)
+    
 readUserFile()
     
 hostname = socket.gethostname()
 host = socket.gethostbyname(hostname)
-print("IP Address is " + host + ":" + str(port))
+# print("IP Address is " + host + ":" + str(port))
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
